@@ -75,17 +75,13 @@ class MercadoLibreAPI:
                     parts = account['access_token'].split('-')
                     if len(parts) > 1:
                         account['client_id'] = parts[1]
-                        except:
-                            pass
-                    
-                    self.accounts.append(account)
-                
-                print(f"[OK] {len(self.accounts)} cuentas cargadas.")
-                self.check_expirations()
-            else:
-                print(f"[WARN] Archivo de tokens no encontrado")
-        except Exception as e:
-            print(f"[ERROR] Error cargando tokens: {e}")
+                except:
+                    pass
+            
+            self.accounts.append(account)
+        
+        print(f"[OK] {len(self.accounts)} cuentas cargadas.")
+        self.check_expirations()
 
     def check_expirations(self):
         """Revisa y refresca tokens expirados al inicio"""
