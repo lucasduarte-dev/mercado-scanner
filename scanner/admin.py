@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
-from .models import Scan
+from .models import Scan, PremierShipmentCache
 
 class TipoEnvioFilter(admin.SimpleListFilter):
     title = _('Tipo de Envío')
@@ -68,3 +68,11 @@ class ScanAdmin(admin.ModelAdmin):
             return 'CANCELADO'
         return obj.current_status or 'VIGENTE'
     get_status_display.short_description = 'Estado'
+
+
+@admin.register(PremierShipmentCache)
+class PremierShipmentCacheAdmin(admin.ModelAdmin):
+    list_display = ('did', 'customer_name', 'tipo', 'fetched_at', 'used')
+    list_filter = ('tipo', 'used', 'fetched_at')
+    search_fields = ('did', 'customer_name')
+    ordering = ('-fetched_at',)

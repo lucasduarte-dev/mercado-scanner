@@ -291,18 +291,11 @@ def process_scan(request):
         if scan.status == 'success':
             from .sheets_logger import GoogleSheetsLogger
             
-            # Siempre registrar en la hoja principal
-            GoogleSheetsLogger.log_scan(scan)
-            
             # Determinar tipo de estado para tracking de devoluciones
             estado_tipo = None
             if scan.is_logistics:
-                # Para logística, usar logistics_type (CAMBIO, PARTICULAR)
                 estado_tipo = scan.logistics_type
             else:
-                # Para ML, usar SOLO current_status (más confiable que is_cancelled)
-                # BUG FIX #3: is_cancelled puede quedar desactualizado cuando update_shipment_status
-                # actualiza los estados. Usar current_status es más preciso.
                 if scan.current_status == 'cancelled':
                     estado_tipo = 'CANCELADO'
                 elif scan.current_status == 'returned' or 'returned' in str(scan.current_status).lower():
@@ -311,18 +304,13 @@ def process_scan(request):
                     estado_tipo = 'DEVOLUCION'
             
             # Determinar si debe ir a "Pendientes de devolución"
-            # NUEVA REGLA: Solo registrar si Estado de Retiro = VIGENTE y Estado Actual = CANCELADO/DEVOLUCION
-            # Esto indica que el paquete ya fue escaneado (estaba en manos) pero luego fue cancelado/devuelto
             debe_registrar_pendiente = False
             
-            if scan_count == 1:  # Solo primer escaneo
+            if scan_count == 1:
                 if scan.is_logistics:
-                    # Para logística: CAMBIO o PARTICULAR siempre van a pendientes (ya están en manos)
                     if estado_tipo in ['CAMBIO', 'PARTICULAR']:
                         debe_registrar_pendiente = True
                 else:
-                    # Para ML: Solo si estaba VIGENTE al escanear y ahora está CANCELADO o DEVOLUCION
-                    # Formatear estados para comparación
                     estado_retiro_fmt = GoogleSheetsLogger._format_status(
                         scan.initial_status,
                         order_data=scan.api_response.get('order') if scan.api_response else None,
@@ -335,19 +323,20 @@ def process_scan(request):
                         shipment_data=scan.api_response.get('shipment') if scan.api_response else None
                     )
                     
-                    # REGLA: Estado Retiro = VIGENTE y Estado Actual = CANCELADO
                     if estado_retiro_fmt == 'VIGENTE' and estado_actual_fmt == 'CANCELADO':
                         debe_registrar_pendiente = True
                         print(f"[SCAN] Detectado: Vigente→CANCELADO - Registrando en Pendientes")
             
-            # Registrar en "Pendientes de devolución" si cumple la regla
+            # REGISTRAR EN UNA SOLA HOJA - NO EN AMBAS
             if debe_registrar_pendiente:
                 print(f"[SCAN] 1er escaneo de {estado_tipo} - Registrando en 'Pendientes de devolución'")
                 GoogleSheetsLogger.log_to_pending_returns(scan)
+            else:
+                # Solo registrar en hoja principal si NO va a pendientes
+                GoogleSheetsLogger.log_scan(scan)
             
-            # TERCER ESCANEO de CAMBIO/DEVOLUCION → Marcar como completo en columna H
-            # (CANCELADOS no se marcan como completos porque no se vuelven a escanear)
-            elif scan_count == 3 and estado_tipo in ['CAMBIO', 'DEVOLUCION']:
+            # TERCER ESCANEO de CAMBIO/DEVOLUCION → Marcar como completo
+            if scan_count == 3 and estado_tipo in ['CAMBIO', 'DEVOLUCION']:
                 print(f"[SCAN] 3er escaneo de {estado_tipo} - Marcando como COMPLETO")
                 GoogleSheetsLogger.mark_return_complete(scan.shipment_id, estado_tipo)
         

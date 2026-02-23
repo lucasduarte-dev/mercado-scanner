@@ -56,3 +56,22 @@ class Scan(models.Model):
 
     def __str__(self):
         return f"Scan {self.shipment_id} - {self.status}"
+
+
+class PremierShipmentCache(models.Model):
+    """Cache de envíos pre-cargados desde Premier Mensajeria.
+    Se llena automáticamente a las 13:30 y 13:40 para que los escaneos sean instantáneos."""
+    did = models.CharField(max_length=50, db_index=True, help_text="DID del envío (extraído del link público)")
+    customer_name = models.CharField(max_length=200, blank=True, null=True, help_text="Nombre del cliente")
+    tipo = models.CharField(max_length=20, blank=True, null=True, help_text="PARTICULAR o CAMBIO")
+    raw_row_data = models.JSONField(blank=True, null=True, help_text="Datos completos extraídos de la fila/modal")
+    fetched_at = models.DateTimeField(auto_now_add=True, help_text="Fecha/hora del pre-fetch")
+    used = models.BooleanField(default=False, help_text="Si ya fue consultado en un escaneo")
+
+    class Meta:
+        ordering = ['-fetched_at']
+        verbose_name = 'Premier Cache'
+        verbose_name_plural = 'Premier Cache'
+
+    def __str__(self):
+        return f"[Cache] DID {self.did} - {self.tipo} - {self.customer_name}"

@@ -55,8 +55,32 @@ def process_premier_scan(qr_data, scanner_user):
             logistics_data=qr_data
         )
         
-        # Buscar en Premier Mensajeria
-        result = buscar_envio_premier(qr_data)
+        # ========================================
+        # PRIMERO: Buscar en caché pre-cargado
+        # ========================================
+        from .models import PremierShipmentCache
+        
+        cached = PremierShipmentCache.objects.filter(did=did).order_by('-fetched_at').first()
+        
+        if cached:
+            print(f"[Premier] ✓ CACHE HIT - DID {did} encontrado en caché pre-cargado")
+            
+            # Marcar como usado
+            cached.used = True
+            cached.save(update_fields=['used'])
+            
+            result = {
+                'found': True,
+                'nombre': cached.customer_name or '',
+                'apellido': '',
+                'tipo': cached.tipo or 'PARTICULAR',
+                'status': 'VIGENTE',
+            }
+        else:
+            print(f"[Premier] CACHE MISS - DID {did} no está en caché, buscando en navegador...")
+            # Buscar en Premier Mensajeria (flujo original - abre navegador)
+            from .premier_api import buscar_envio_premier
+            result = buscar_envio_premier(qr_data)
         
         if result.get('found'):
             # Extraer datos
@@ -94,16 +118,16 @@ def process_premier_scan(qr_data, scanner_user):
         
         scan.save()
         
-        # Registrar en Google Sheets
+        # Registrar en Google Sheets - SOLO UNA VEZ
         if scan.status == 'success':
             from .sheets_logger import GoogleSheetsLogger
-            GoogleSheetsLogger.log_scan(scan)
-            # Si es un CAMBIO de Premier, también registrar en 'Pendientes de devolución'
-            try:
-                if getattr(scan, 'logistics_type', None) == 'CAMBIO':
-                    GoogleSheetsLogger.log_to_pending_returns(scan)
-            except Exception as e:
-                print(f"[Premier WARN] No se pudo registrar en Pendientes: {e}")
+            
+            # Si es un CAMBIO, registrar en 'Pendientes de devolución'
+            if getattr(scan, 'logistics_type', None) == 'CAMBIO':
+                GoogleSheetsLogger.log_to_pending_returns(scan)
+            else:
+                # Para PARTICULARES y otros tipos, registrar en hoja principal
+                GoogleSheetsLogger.log_scan(scan)
         
         return JsonResponse({
             'success': scan.status == 'success',

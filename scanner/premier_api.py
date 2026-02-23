@@ -317,6 +317,162 @@ class PremierMensajeriaAPI:
             import traceback
             traceback.print_exc()
             return result
+
+    def fetch_all_shipments(self):
+        """
+        Scrape masivo: recorre TODAS las filas de la tabla de Premier
+        y extrae DID, tipo (PARTICULAR/CAMBIO), y nombre del cliente.
+        Retorna lista de dicts: [{"did": "...", "customer_name": "...", "tipo": "...", "raw": {...}}, ...]
+        """
+        shipments = []
+        
+        try:
+            # Configurar vista para mostrar máximas filas
+            print("[Premier PreFetch] Configurando vista de filas (Opción 6)...")
+            try:
+                select_xpath = "/html/body/div[1]/div[1]/div/div/div/div[16]/div[1]/div/div/div[5]/div/div[3]/select"
+                target_select = self.page.locator(f"xpath={select_xpath}")
+                
+                if target_select.is_visible():
+                    option_value = target_select.evaluate('''
+                        (select) => {
+                            if (select.options.length >= 6) {
+                                return select.options[5].value; 
+                            }
+                            return null;
+                        }
+                    ''')
+                    
+                    if option_value:
+                        print(f"[Premier PreFetch] Seleccionando opción valor: {option_value}")
+                        target_select.select_option(option_value)
+                        self.page.wait_for_timeout(3000)
+                    else:
+                        print("[Premier PreFetch] El select no tiene 6 opciones")
+                else:
+                    print("[Premier PreFetch] Selector de paginación no encontrado")
+            except Exception as e:
+                print(f"[Premier PreFetch] Error cambiando límite de registros: {e}")
+
+            # Navegar a la página correcta (li[4])
+            print("[Premier PreFetch] Navegando a la página de envíos...")
+            try:
+                nav_button_xpath = "/html/body/div[1]/div[1]/div/div/div/div[16]/div[1]/div/div/div[5]/div/div[2]/ul/li[4]/a"
+                if self.page.locator(f"xpath={nav_button_xpath}").is_visible():
+                    self.page.locator(f"xpath={nav_button_xpath}").click()
+                    self.page.wait_for_timeout(2000)
+                else:
+                    print("[Premier PreFetch] Botón de navegación no visible")
+            except Exception as e:
+                print(f"[Premier PreFetch] Error navegando: {e}")
+
+            # Obtener todas las filas
+            rows = self.page.query_selector_all('table tbody tr')
+            if len(rows) == 0:
+                rows = self.page.query_selector_all('tr')
+            
+            print(f"[Premier PreFetch] Encontradas {len(rows)} filas para procesar")
+            
+            for i, row in enumerate(rows):
+                try:
+                    # Extraer nombre del cliente desde columna 8
+                    customer_name = ""
+                    try:
+                        cells = row.query_selector_all('td')
+                        if len(cells) >= 8:
+                            customer_name = cells[7].inner_text().strip()
+                        if len(cells) == 0:
+                            continue  # Skip header rows
+                    except:
+                        pass
+
+                    # Click en la fila para abrir el modal
+                    row.click()
+                    self.page.wait_for_timeout(1500)
+                    
+                    # Extraer link público para obtener DID
+                    public_link = None
+                    try:
+                        input_xpath = "/html/body/div[1]/div[1]/div/div/div/div[15]/div/div/div[1]/div/div[2]/div/div[2]/div/div[2]/div[1]/input"
+                        link_input = self.page.locator(f"xpath={input_xpath}")
+                        
+                        if link_input.is_visible():
+                            public_link = link_input.input_value()
+                            if not public_link:
+                                self.page.wait_for_timeout(500)
+                                public_link = link_input.input_value()
+                        else:
+                            # Fallback: buscar input con tracking.php
+                            input_val = self.page.evaluate('''
+                                () => {
+                                    const inputs = Array.from(document.querySelectorAll('input'));
+                                    const target = inputs.find(i => i.value && i.value.includes('tracking.php'));
+                                    return target ? target.value : null;
+                                }
+                            ''')
+                            if input_val:
+                                public_link = input_val
+                            
+                            # Fallback: buscar en <a>
+                            if not public_link:
+                                links = self.page.eval_on_selector_all('a', 'elements => elements.map(el => el.href)')
+                                for link in links:
+                                    if 'did=' in link or 'tracking.php' in link:
+                                        public_link = link
+                                        break
+                    except Exception as e:
+                        print(f"[Premier PreFetch] Error extrayendo link fila {i}: {e}")
+                    
+                    # Extraer tipo (PARTICULAR/CAMBIO) del contenido del modal
+                    tipo = ""
+                    try:
+                        page_content = self.page.locator('body').inner_text()
+                        if 'PARTICULAR' in page_content:
+                            tipo = 'PARTICULAR'
+                        elif 'CAMBIO' in page_content:
+                            tipo = 'CAMBIO'
+                    except:
+                        pass
+                    
+                    # Extraer DID del link
+                    did = None
+                    if public_link:
+                        did = self._extract_did_from_link(public_link)
+                    
+                    # Solo guardar si tiene DID y es PARTICULAR o CAMBIO
+                    if did and tipo in ('PARTICULAR', 'CAMBIO'):
+                        shipment_data = {
+                            'did': did,
+                            'customer_name': customer_name,
+                            'tipo': tipo,
+                            'public_link': public_link,
+                            'row_index': i,
+                        }
+                        shipments.append(shipment_data)
+                        print(f"[Premier PreFetch] ✓ Fila {i}: DID={did}, Tipo={tipo}, Cliente={customer_name}")
+                    else:
+                        print(f"[Premier PreFetch] ✗ Fila {i}: DID={did}, Tipo={tipo or 'N/A'} (saltado)")
+                    
+                    # Cerrar modal
+                    self.page.keyboard.press('Escape')
+                    self.page.wait_for_timeout(300)
+                    
+                except Exception as row_error:
+                    print(f"[Premier PreFetch] Error en fila {i}: {row_error}")
+                    try:
+                        self.page.keyboard.press('Escape')
+                        self.page.wait_for_timeout(300)
+                    except:
+                        pass
+            
+            print(f"[Premier PreFetch] Completado: {len(shipments)} envíos PARTICULAR/CAMBIO encontrados")
+            return shipments
+            
+        except Exception as e:
+            print(f"[Premier PreFetch ERROR] {e}")
+            import traceback
+            traceback.print_exc()
+            return shipments
     
     def close(self):
         """Cierra el navegador"""
