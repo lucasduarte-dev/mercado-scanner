@@ -1,0 +1,58 @@
+# Database
+db.sqlite3
+db_backup.sqlite3
+*.sqlite3
+
+# Data dumps
+data.json
+
+# Credentials & Secrets
+credentials.json
+meli_tokens.json
+pkce.json
+.env
+.env.local
+
+# Temporary files
+*.pkl
+*.pyc
+__pycache__/
+*.egg-info/
+*.eggs/
+dist/
+build/
+
+# Logs
+*.log
+logs/
+update_log.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Django
+*.pot
+local_settings.py
+
+# Python
+venv/
+env/
+ENV/
+*.py[cod]
+*$py.class
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Testing
+htmlcov/
+.tox/
+.coverage
+.pytest_cache/

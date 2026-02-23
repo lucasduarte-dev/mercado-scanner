@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scanner Mercado Envíos</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'scanner/css/styles.css' %}">
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <style>
+        /* Estilos del Dashboard */
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #2a2a4a, #1a1a2e);
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid #3f3f5f;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .stat-card h3 {
+            font-size: 0.9rem;
+            color: #a0a0b0;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-card .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #00d9ff;
+        }
+
+        /* Ajustes Responsivos */
+        .controls-wrapper {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            /* Permitir que los botones bajen en movil */
+        }
+
+        .user-selection {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .user-select {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            background: #252542;
+            color: white;
+            border: 1px solid #3f3f5f;
+            font-size: 1rem;
+        }
+
+        .scanner-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        @media (max-width: 600px) {
+            .stats-container {
+                gap: 10px;
+            }
+
+            .stat-card {
+                padding: 10px;
+            }
+
+            .stat-card h3 {
+                font-size: 0.7rem;
+            }
+
+            .stat-card .stat-value {
+                font-size: 1.4rem;
+            }
+
+            .controls-wrapper {
+                flex-direction: column;
+            }
+
+            .scanner-controls {
+                width: 100%;
+            }
+
+            .scanner-controls button {
+                flex: 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <h1>📦 Scanner Mercado Envíos</h1>
+            <p class="subtitle">Escanea códigos QR y de barras</p>
+        </header>
+
+        <!-- Status de credenciales -->
+        <div class="auth-banner {% if any_active %}connected{% endif %}">
+            {% if any_active %}
+            <span>✅ {{ accounts_count }} Cuentas Activas</span>
+            {% else %}
+            <span>⚠️ Sin cuentas válidas</span>
+            {% endif %}
+
+            <div style="display: flex; gap: 2px; flex-wrap: wrap;">
+                {% for acc in accounts %}
+                <span class="user-id" title="User ID">
+                    👤 {{ acc.user_id }} {% if acc.has_token %}✅{% else %}❌{% endif %}
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Dashboard Stats -->
+        <div class="stats-container">
+            <div class="stat-card" style="border-color: #fbbf24;">
+                <h3>⚡ Flex (Vigentes)</h3>
+                <span class="stat-value" style="color: #fbbf24;">{{ stats.flex }}</span>
+            </div>
+            <div class="stat-card" style="border-color: #10b981;">
+                <h3>🛵 Mensajería (Vigentes)</h3>
+                <span class="stat-value" style="color: #10b981;">{{ stats.mensajeria }}</span>
+            </div>
+            <div class="stat-card" style="border-color: #ef4444;">
+                <h3>❌ Cancelados</h3>
+                <span class="stat-value" style="color: #ef4444;">{{ stats.cancelados }}</span>
+            </div>
+            <div class="stat-card" style="border-color: #f97316;">
+                <h3>↩️ Devoluciones</h3>
+                <span class="stat-value" style="color: #f97316;">{{ stats.devoluciones }}</span>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Scanner Section -->
+            <section class="scanner-section">
+                <div class="scanner-header">
+                    <h2>📷 Scanner</h2>
+                </div>
+
+                <div class="controls-wrapper">
+                    <div class="user-selection">
+                        <select id="user-picker" class="user-select">
+                            <option value="">👤 Selecciona quién escanea...</option>
+                            <option value="Jose">Jose</option>
+                            <option value="Fede">Fede</option>
+                            <option value="Gonza">Gonza</option>
+                            <option value="Valen">Valen</option>
+                            <option value="Lucas">Lucas</option>
+                            <option value="Juan">Juan</option>
+                        </select>
+                    </div>
+
+                    <div class="scanner-controls">
+                        <button id="startBtn" class="btn btn-success" disabled>Iniciar</button>
+                        <button id="stopBtn" class="btn btn-danger" disabled>Detener</button>
+                        <button id="scanReturnBtn" class="btn btn-info" style="background-color: #8b5cf6;">Escanear Regreso</button>
+                    </div>
+                </div>
+
+                <div class="scanner-container" style="position: relative;">
+                    <div id="reader" class="scanner-viewport"></div>
+
+                    <!-- Overlay de Status (Hidden by default) -->
+                    <div id="scan-overlay" class="hidden" style="
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        display: none; /* Default hidden */
+                        align-items: center;
+                        justify-content: center;
+                        z-index: 50;
+                        background-color: rgba(0,0,0,0.5);
+                        pointer-events: none;
+                    ">
+                        <div id="overlay-content" style="
+                            background: white;
+                            padding: 2rem;
+                            border-radius: 1.5rem;
+                            border: 8px solid white;
+                            text-align: center;
+                            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+                            transform: scale(1.1);
+                        ">
+                            <div id="overlay-icon" style="font-size: 5rem; line-height: 1; margin-bottom: 0.5rem;">✅
+                            </div>
+                            <div id="overlay-text" style="font-size: 3rem; font-weight: 900; line-height: 1;">VIGENTE
+                            </div>
+                            <div id="overlay-subtext"
+                                style="font-size: 1.25rem; font-weight: 700; margin-top: 0.5rem; color: #4b5563;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="scan-status" class="scan-status">
+                    <span class="status-text">Presiona "Iniciar" para comenzar</span>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- History Section -->
+        <section class="history-section">
+            <h2>🕐 Historial Reciente</h2>
+            <div id="history-list" class="history-list">
+                {% for scan in recent_scans %}
+                <div class="history-item" data-id="{{ scan.id }}">
+                    <div class="history-main">
+                        <span class="shipment-id">{{ scan.shipment_id }}</span>
+                        <span class="status-badge {{ scan.status }}">{{ scan.status }}</span>
+                    </div>
+                    <div class="history-meta">
+                        <span>{{ scan.scanned_at|date:"d/m/Y H:i" }}</span>
+                        {% if scan.buyer_nickname %}
+                        <span>👤 {{ scan.buyer_nickname }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <p class="no-history">No hay escaneos aún</p>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Error Modal -->
+        <div id="error-modal" class="modal hidden">
+            <div class="modal-content">
+                <h3>❌ Error</h3>
+                <p id="error-message"></p>
+                <button onclick="closeErrorModal()" class="btn btn-primary">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{% static 'scanner/js/scanner.js' %}"></script>
+</body>
+
+</html>
