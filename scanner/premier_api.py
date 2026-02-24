@@ -383,6 +383,13 @@ class PremierMensajeriaAPI:
                             customer_name = cells[7].inner_text().strip()
                         if len(cells) == 0:
                             continue  # Skip header rows
+                        
+                        # FILTRO: Solo procesar filas donde columna 4 diga "Directo"
+                        if len(cells) >= 4:
+                            col4_text = cells[3].inner_text().strip()
+                            if col4_text != 'Directo':
+                                print(f"[Premier PreFetch] ✗ Fila {i}: Tipo='{col4_text}' (no es Directo, saltado)")
+                                continue
                     except:
                         pass
 

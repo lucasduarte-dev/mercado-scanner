@@ -4,10 +4,15 @@ Ejecutar a las 13:30 y 13:40 con Windows Task Scheduler.
 Scrape todos los envíos PARTICULAR/CAMBIO y los guarda en caché local
 para que los escaneos sean instantáneos.
 """
+import os
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from scanner.models import PremierShipmentCache
 from scanner.premier_api import PremierMensajeriaAPI
+
+# Playwright usa event loop async internamente.
+# Esto permite que Django haga queries sync dentro de ese contexto.
+os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
 
 
 class Command(BaseCommand):
@@ -27,23 +32,31 @@ class Command(BaseCommand):
             + '=' * 50
         ))
 
+        # PASO 1: Scrape (con Playwright - contexto async)
         api = PremierMensajeriaAPI()
+        shipments = []
         try:
-            # Iniciar navegador y login
             api.start()
             if not api.login():
                 self.stdout.write(self.style.ERROR('[Premier PreFetch] ✗ Login falló'))
                 return
 
             self.stdout.write(self.style.SUCCESS('[Premier PreFetch] ✓ Login exitoso'))
-
-            # Scrape masivo
             shipments = api.fetch_all_shipments()
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f'[Premier PreFetch] ERROR en scrape: {e}'))
+            import traceback
+            traceback.print_exc()
+            return
+        finally:
+            api.close()
 
-            if not shipments:
-                self.stdout.write(self.style.WARNING('[Premier PreFetch] No se encontraron envíos PARTICULAR/CAMBIO'))
-                return
+        # PASO 2: Guardar en BD (ya sin Playwright activo)
+        if not shipments:
+            self.stdout.write(self.style.WARNING('[Premier PreFetch] No se encontraron envíos PARTICULAR/CAMBIO'))
+            return
 
+        try:
             # Limpiar caché anterior del día (a menos que --keep-old)
             if not options.get('keep_old'):
                 today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -82,8 +95,6 @@ class Command(BaseCommand):
             ))
 
         except Exception as e:
-            self.stdout.write(self.style.ERROR(f'[Premier PreFetch] ERROR: {e}'))
+            self.stdout.write(self.style.ERROR(f'[Premier PreFetch] ERROR guardando en BD: {e}'))
             import traceback
             traceback.print_exc()
-        finally:
-            api.close()
