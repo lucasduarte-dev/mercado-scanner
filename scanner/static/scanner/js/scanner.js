@@ -73,6 +73,8 @@ const overlaySubtext = document.getElementById('overlay-subtext');
 // Event Listeners
 userPicker.addEventListener('change', () => {
     startBtn.disabled = !userPicker.value;
+    const scanReturnBtn = document.getElementById('scanReturnBtn');
+    if (scanReturnBtn) scanReturnBtn.disabled = !userPicker.value;
 });
 
 startBtn.addEventListener('click', () => {
@@ -154,7 +156,7 @@ async function stopScanner() {
         startBtn.disabled = !userPicker.value;
         stopBtn.disabled = true;
         const scanReturnBtn = document.getElementById('scanReturnBtn');
-        if (scanReturnBtn) scanReturnBtn.disabled = false;
+        if (scanReturnBtn) scanReturnBtn.disabled = !userPicker.value;
         userPicker.disabled = false;
         updateStatus('', 'Scanner detenido');
     }
@@ -178,7 +180,7 @@ function isCancelledScan(apiData) {
 async function onScanSuccess(decodedText) {
     // Ignorar si estamos en modo de escaneo de devoluciones
     if (isReturnscanMode) return;
-    
+
     // Prevención de duplicados inmediata
     const now = Date.now();
     if (decodedText === lastScannedCode && (now - lastScanTime < DUPLICATE_THRESHOLD)) {
@@ -452,7 +454,7 @@ async function loadScanDetail(scanId) {
 async function startReturnScanner() {
     console.log('📹 startReturnScanner() iniciando...');
     console.log(`  isScanning=${isScanning}, html5QrCode=${!!html5QrCode}`);
-    
+
     try {
         // Si el scanner normal está activo, detenerlo primero
         if (isScanning && html5QrCode) {
@@ -466,7 +468,7 @@ async function startReturnScanner() {
 
         html5QrCode = new Html5Qrcode("reader");
         console.log('✅ Html5Qrcode inicializado');
-        
+
         const config = {
             fps: 10,
             qrbox: { width: 250, height: 250 },
@@ -489,12 +491,13 @@ async function startReturnScanner() {
             onReturnScanSuccess,
             () => { }
         );
-        
+
         console.log('✅ Cámara iniciada exitosamente');
 
         isScanning = true;
         isReturnscanMode = true;
         startBtn.disabled = true;
+        stopBtn.disabled = false;
         const scanReturnBtn = document.getElementById('scanReturnBtn');
         if (scanReturnBtn) scanReturnBtn.disabled = true;
         userPicker.disabled = true;
@@ -538,7 +541,7 @@ async function onReturnScanSuccess(decodedText) {
         if (data.success) {
             playBeep('success');
             updateStatus('success', '✅ REGRESO MARCADO');
-            
+
             // Mostrar overlay de éxito
             const overlay = document.getElementById('scan-overlay');
             if (overlay) {
@@ -560,7 +563,7 @@ async function onReturnScanSuccess(decodedText) {
         } else {
             playBeep('error');
             updateStatus('error', '❌ No encontrado');
-            
+
             // Mostrar overlay de error
             const overlay = document.getElementById('scan-overlay');
             if (overlay) {
