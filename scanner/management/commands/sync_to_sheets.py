@@ -85,6 +85,10 @@ class Command(BaseCommand):
                 else:
                     errors += 1
                     self.stdout.write(self.style.ERROR(f'  ✗ {label} → Error'))
+                
+                # Pausa para evitar rate limit de Google Sheets (max 60 writes/min)
+                import time
+                time.sleep(5)
             except Exception as e:
                 errors += 1
                 self.stdout.write(self.style.ERROR(f'  ✗ {label} → {e}'))
