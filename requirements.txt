@@ -1,0 +1,9 @@
+# Mercado Scanner - Dependencias
+django>=5.2
+requests
+playwright
+gspread
+oauth2client
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib

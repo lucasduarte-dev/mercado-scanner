@@ -23,6 +23,12 @@ class Command(BaseCommand):
             action='store_true',
             help='Solo mostrar qué se sincronizaría, sin escribir',
         )
+        parser.add_argument(
+            '--skip',
+            type=int,
+            default=0,
+            help='Saltear los primeros N escaneos (ya sincronizados)',
+        )
 
     def handle(self, *args, **options):
         from scanner.sheets_logger import GoogleSheetsLogger
@@ -61,9 +67,17 @@ class Command(BaseCommand):
         synced = 0
         errors = 0
 
-        for scan in scans:
+        skip_count = options.get('skip', 0)
+        if skip_count > 0:
+            self.stdout.write(self.style.WARNING(f'Salteando los primeros {skip_count} escaneos\n'))
+
+        for idx, scan in enumerate(scans):
             tipo = scan.logistics_type if scan.is_logistics else scan.shipping_mode or 'ML'
             label = f'ID={scan.shipment_id} | {tipo} | {scan.scanner_user or "?"}'
+
+            if idx < skip_count:
+                self.stdout.write(f'  ⏭ {label} (salteado)')
+                continue
 
             if options.get('dry_run'):
                 self.stdout.write(f'  [DRY] {label}')
