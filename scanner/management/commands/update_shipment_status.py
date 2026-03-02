@@ -8,7 +8,7 @@ from scanner.models import Scan
 from scanner.ml_api import MercadoLibreAPI
 from scanner.sheets_logger import GoogleSheetsLogger
 import gspread
-from datetime import datetime
+from datetime import datetime, time
 
 
 class Command(BaseCommand):
@@ -36,15 +36,8 @@ class Command(BaseCommand):
         current_minute = now.minute
         current_time = f'{current_hour:02d}:{current_minute:02d}'
         
-        # Solo registrar en Pendientes si es después de 14:30
-        should_register_pending = (current_hour > 14) or (current_hour == 14 and current_minute >= 30)
-        
-        if not should_register_pending:
-            self.stdout.write(self.style.WARNING(f'⏰ Hora actual: {current_time} (antes de 14:30)'))
-            self.stdout.write(self.style.WARNING('   → No se registrará en Pendientes de devolución esta ejecución'))
-        else:
-            self.stdout.write(self.style.SUCCESS(f'⏰ Hora actual: {current_time} (después de 14:30)'))
-            self.stdout.write(self.style.SUCCESS('   → Se registrará en Pendientes de devolución si hay cambios'))
+        # La decisión de registrar en Pendientes se basa en el timestamp REAL de la API (no en la hora del servidor).
+        self.stdout.write(self.style.SUCCESS(f'⏰ Hora actual del servidor: {current_time}'))
         
         # Obtener envíos desde Google Sheets
         self.stdout.write('Obteniendo envíos desde Google Sheets...')
@@ -123,28 +116,31 @@ class Command(BaseCommand):
                             time_info = f' (cambió: {api_timestamp_str})' if api_timestamp_str else ''
                             self.stdout.write(self.style.SUCCESS(f' ACTUALIZADO: {current_status} -> {new_status_formatted}{time_info}'))
                             
-                            # DETECTAR: Si pasa de VIGENTE a CANCELADO, registrar en Pendientes (solo después de 14:30)
-                            if should_register_pending and current_status == 'VIGENTE' and new_status_formatted == 'CANCELADO':
-                                try:
-                                    # Verificar si ya existe en Pendientes
-                                    pending_sheet = GoogleSheetsLogger._get_pending_returns_sheet()
-                                    existing = None
-                                    if pending_sheet:
-                                        try:
-                                            existing = pending_sheet.find(shipment_id, in_column=6)  # Columna F (6) = ID ENVIO
-                                        except gspread.CellNotFound:
-                                            existing = None
-                                    
-                                    if existing:
-                                        self.stdout.write(self.style.WARNING(f'  → Ya existe en Pendientes (fila {existing.row})'))
-                                    else:
-                                        scan_obj_tmp = Scan.objects.filter(shipment_id=shipment_id).latest('scanned_at')
-                                        GoogleSheetsLogger.log_to_pending_returns(scan_obj_tmp)
-                                        self.stdout.write(self.style.WARNING(f'  → Registrado en Pendientes de devolución: {shipment_id}'))
-                                except Exception as e:
-                                    self.stdout.write(self.style.WARNING(f'  [WARN] No se pudo registrar en Pendientes: {e}'))
-                            elif not should_register_pending and current_status == 'VIGENTE' and new_status_formatted == 'CANCELADO':
-                                self.stdout.write(self.style.WARNING(f'  ⏰ Cambio a CANCELADO detectado pero es antes de 14:30 - No se registra en Pendientes'))
+                            # DETECTAR: Si pasa de VIGENTE a CANCELADO, usar la hora de la API para decidir
+                            if current_status == 'VIGENTE' and new_status_formatted == 'CANCELADO':
+                                CUTOFF = time(14, 30)
+                                cancel_after_cutoff = bool(api_timestamp) and api_timestamp.time() >= CUTOFF
+                                if cancel_after_cutoff:
+                                    self.stdout.write(f'  📋 Cancelación a las {api_timestamp.strftime("%H:%M")} del {api_timestamp.strftime("%d/%m")} (después del corte 14:30)')
+                                    try:
+                                        pending_sheet = GoogleSheetsLogger._get_pending_returns_sheet()
+                                        existing = None
+                                        if pending_sheet:
+                                            try:
+                                                existing = pending_sheet.find(shipment_id, in_column=6)
+                                            except gspread.CellNotFound:
+                                                existing = None
+                                        if existing:
+                                            self.stdout.write(self.style.WARNING(f'  → Ya existe en Pendientes (fila {existing.row})'))
+                                        else:
+                                            scan_obj_tmp = Scan.objects.filter(shipment_id=shipment_id).latest('scanned_at')
+                                            GoogleSheetsLogger.log_to_pending_returns(scan_obj_tmp)
+                                            self.stdout.write(self.style.WARNING(f'  → ⚠️ CANCELADO DESPUÉS DE 14:30 → Registrado en Pendientes de devolución'))
+                                    except Exception as e:
+                                        self.stdout.write(self.style.WARNING(f'  [WARN] No se pudo registrar en Pendientes: {e}'))
+                                else:
+                                    hora_str = api_timestamp.strftime('%H:%M') if api_timestamp else 'desconocida'
+                                    self.stdout.write(f'  ✓ Cancelación a las {hora_str} → antes del corte 14:30, no requiere devolución')
                             
                             # BUG FIX #4: También actualizar en BD para mantener sincronización
                             try:
