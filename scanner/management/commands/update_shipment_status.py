@@ -8,6 +8,7 @@ from scanner.models import Scan
 from scanner.ml_api import MercadoLibreAPI
 from scanner.sheets_logger import GoogleSheetsLogger
 import gspread
+from datetime import datetime
 
 
 class Command(BaseCommand):
@@ -82,20 +83,32 @@ class Command(BaseCommand):
                 api_result = ml_api.get_full_shipment_info(shipment_id)
                 
                 if api_result.get('shipment'):
+                    # Extraer timestamp real de la API
+                    api_last_updated = api_result['shipment'].get('last_updated', '')
+                    api_timestamp_str = ''
+                    api_timestamp = None
+                    if api_last_updated:
+                        try:
+                            # Formato ML: "2026-02-25T18:30:00.000-0300"
+                            # Limpiar y parsear
+                            clean_ts = api_last_updated.replace('T', ' ')
+                            if '.' in clean_ts:
+                                clean_ts = clean_ts[:clean_ts.index('.')]
+                            api_timestamp = datetime.fromisoformat(api_last_updated)
+                            api_timestamp_str = api_timestamp.strftime('%d/%m %H:%M')
+                        except Exception:
+                            api_timestamp_str = api_last_updated[:16] if len(api_last_updated) > 16 else api_last_updated
+
                     # Priorizar estado del PEDIDO/VENTA
                     new_status_raw = None
                     if api_result.get('order'):
                         new_status_raw = api_result['order'].get('status')
-                        # self.stdout.write(f" [Order: {new_status_raw}]", ending='')
                     
                     # Fallback al estado del envío si no hay order
                     if not new_status_raw:
                         new_status_raw = api_result['shipment'].get('status')
-                        # self.stdout.write(f" [Ship: {new_status_raw}]", ending='')
-
 
                     # Normalizar estado para comparación (VIGENTE / CANCELADO / DEVOLUCION)
-                    # El formatter ahora detecta automáticamente devoluciones post-entrega
                     new_status_formatted = GoogleSheetsLogger._format_status(
                         new_status_raw,
                         order_data=api_result.get('order'),
@@ -103,14 +116,12 @@ class Command(BaseCommand):
                     )
                     
                     # Comparar con estado actual en Sheets
-                    # El estado actual en Sheets ya debería estar en formato "VIGENTE"/"CANCELADO"
-                    # pero a veces puede ser texto crudo si se editó manual
-                    
                     if new_status_formatted != current_status:
                         # Actualizar en Sheets con resaltado
                         if GoogleSheetsLogger.update_row_status(row_num, new_status_raw, highlight=True):
                             updated_count += 1
-                            self.stdout.write(self.style.SUCCESS(f' ACTUALIZADO: {current_status} -> {new_status_formatted} ({new_status_raw})'))
+                            time_info = f' (cambió: {api_timestamp_str})' if api_timestamp_str else ''
+                            self.stdout.write(self.style.SUCCESS(f' ACTUALIZADO: {current_status} -> {new_status_formatted}{time_info}'))
                             
                             # DETECTAR: Si pasa de VIGENTE a CANCELADO, registrar en Pendientes (solo después de 14:30)
                             if should_register_pending and current_status == 'VIGENTE' and new_status_formatted == 'CANCELADO':
@@ -154,8 +165,11 @@ class Command(BaseCommand):
                                 else:  # VIGENTE u otros
                                     scan_obj.is_cancelled = False
                                 
-                                # Actualizar timestamp de última verificación
-                                scan_obj.last_status_check = timezone.now()
+                                # Guardar timestamp real de la API (no timezone.now())
+                                if api_timestamp:
+                                    scan_obj.last_status_check = api_timestamp
+                                else:
+                                    scan_obj.last_status_check = timezone.now()
                                 scan_obj.save()
                                 
                             except Scan.DoesNotExist:
