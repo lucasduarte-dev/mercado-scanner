@@ -69,11 +69,14 @@ def process_premier_scan(qr_data, scanner_user):
             cached.used = True
             cached.save(update_fields=['used'])
             
+            cached_tipo = cached.tipo.strip().upper() if cached.tipo else ''
+            if not cached_tipo:
+                print(f"[Premier] ⚠️ Cache DID {did} no tiene tipo definido, se usará 'PARTICULAR' como fallback")
             result = {
                 'found': True,
                 'nombre': cached.customer_name or '',
                 'apellido': '',
-                'tipo': cached.tipo or 'PARTICULAR',
+                'tipo': cached_tipo or 'PARTICULAR',
                 'status': 'VIGENTE',
             }
         else:

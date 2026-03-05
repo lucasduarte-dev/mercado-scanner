@@ -182,15 +182,21 @@ class PremierMensajeriaAPI:
                 
             for i, row in enumerate(rows):
                 try:
-                    # Extraer Nombre del Cliente desde la columna 8
+                    # Extraer Nombre del Cliente (col 8) y Tipo (col 5) directamente de la fila
                     row_customer_name = ""
+                    row_tipo = ""
                     try:
                         cells = row.query_selector_all('td')
+                        if len(cells) == 0:
+                            continue  # Skip header rows
+                        if len(cells) >= 5:
+                            row_tipo = cells[4].inner_text().strip().upper()
+                            # print(f"[Premier] Tipo extraído de columna 5: {row_tipo}")
                         if len(cells) >= 8:
                             row_customer_name = cells[7].inner_text().strip()
                             # print(f"[Premier] Nombre extraído de columna 8: {row_customer_name}")
                     except Exception as col_error:
-                        print(f"[Premier] Error extrayendo columna 8: {col_error}")
+                        print(f"[Premier] Error extrayendo columnas: {col_error}")
 
                     # Click en la fila para abrir el modal
                     row.click()
@@ -255,39 +261,40 @@ class PremierMensajeriaAPI:
                                 result['found'] = True
                                 result['status'] = "VIGENTE"
                                 
-                                # Extraer datos modal
-                                try:
-                                    page_content = self.page.locator('body').inner_text()
-                                    
-                                    # TIPO
-                                    if 'PARTICULAR' in page_content: result['tipo'] = 'PARTICULAR'
-                                    elif 'CAMBIO' in page_content: result['tipo'] = 'CAMBIO'
-                                    else:
-                                        for line in page_content.split('\n'):
-                                            if 'Tracking' in line:
-                                                if 'PARTICULAR' in line.upper(): result['tipo'] = 'PARTICULAR'
-                                                elif 'CAMBIO' in line.upper(): result['tipo'] = 'CAMBIO'
-                                                break
-                                    
-                                    # NOMBRE
-                                    if row_customer_name:
-                                        result['nombre'] = row_customer_name
-                                    else:
-                                        # Fallback modal
+                                # TIPO: leer directo de la columna 5 de la fila (más confiable que buscar en el modal)
+                                if row_tipo in ('PARTICULAR', 'CAMBIO'):
+                                    result['tipo'] = row_tipo
+                                    print(f"[Premier] Tipo desde columna fila: {row_tipo}")
+                                else:
+                                    # Fallback: buscar en el modal solo si no se pudo leer de la fila
+                                    try:
+                                        modal_xpath = "/html/body/div[1]/div[1]/div/div/div/div[15]/div"
+                                        modal_locator = self.page.locator(f"xpath={modal_xpath}")
+                                        modal_content = modal_locator.inner_text() if modal_locator.is_visible() else self.page.locator('body').inner_text()
+                                        if 'CAMBIO' in modal_content.upper():
+                                            result['tipo'] = 'CAMBIO'
+                                        elif 'PARTICULAR' in modal_content.upper():
+                                            result['tipo'] = 'PARTICULAR'
+                                        print(f"[Premier] Tipo desde modal (fallback): {result['tipo']}")
+                                    except Exception as e:
+                                        print(f"[Premier] Error extrayendo tipo del modal: {e}")
+                                
+                                # NOMBRE
+                                if row_customer_name:
+                                    result['nombre'] = row_customer_name
+                                else:
+                                    # Fallback modal
+                                    try:
+                                        page_content = self.page.locator('body').inner_text()
                                         lines = page_content.split('\n')
-                                        nombre_completo = ""
                                         for j, line in enumerate(lines):
                                             if 'Recibe:' in line:
                                                 clean = line.replace('Recibe:', '').strip()
-                                                if clean: nombre_completo = clean
-                                                elif j+1 < len(lines): nombre_completo = lines[j+1].strip()
+                                                if clean: result['nombre'] = clean
+                                                elif j+1 < len(lines): result['nombre'] = lines[j+1].strip()
                                                 break
-                                        
-                                        if nombre_completo:
-                                            result['nombre'] = nombre_completo
-
-                                except Exception as e:
-                                    print(f"[Premier] Error extrayendo datos match: {e}")
+                                    except Exception as e:
+                                        print(f"[Premier] Error extrayendo nombre del modal: {e}")
                                 
                                 # Cerrar modal y salir
                                 self.page.keyboard.press('Escape')
@@ -375,14 +382,17 @@ class PremierMensajeriaAPI:
             
             for i, row in enumerate(rows):
                 try:
-                    # Extraer nombre del cliente desde columna 8
+                    # Extraer nombre (col 8) y tipo (col 5) directamente de la fila
                     customer_name = ""
+                    tipo_from_row = ""
                     try:
                         cells = row.query_selector_all('td')
-                        if len(cells) >= 8:
-                            customer_name = cells[7].inner_text().strip()
                         if len(cells) == 0:
                             continue  # Skip header rows
+                        if len(cells) >= 5:
+                            tipo_from_row = cells[4].inner_text().strip().upper()
+                        if len(cells) >= 8:
+                            customer_name = cells[7].inner_text().strip()
                         
                         # FILTRO: Solo procesar filas donde columna 4 diga "Directo"
                         if len(cells) >= 4:
@@ -430,16 +440,21 @@ class PremierMensajeriaAPI:
                     except Exception as e:
                         print(f"[Premier PreFetch] Error extrayendo link fila {i}: {e}")
                     
-                    # Extraer tipo (PARTICULAR/CAMBIO) del contenido del modal
-                    tipo = ""
-                    try:
-                        page_content = self.page.locator('body').inner_text()
-                        if 'PARTICULAR' in page_content:
-                            tipo = 'PARTICULAR'
-                        elif 'CAMBIO' in page_content:
-                            tipo = 'CAMBIO'
-                    except:
-                        pass
+                    # TIPO: usar el valor leído directo de la columna 5 de la fila
+                    tipo = tipo_from_row if tipo_from_row in ('PARTICULAR', 'CAMBIO') else ""
+                    if not tipo:
+                        # Fallback: buscar en el modal (menos confiable)
+                        try:
+                            modal_xpath = "/html/body/div[1]/div[1]/div/div/div/div[15]/div"
+                            modal_locator = self.page.locator(f"xpath={modal_xpath}")
+                            modal_content = modal_locator.inner_text() if modal_locator.is_visible() else self.page.locator('body').inner_text()
+                            if 'CAMBIO' in modal_content.upper():
+                                tipo = 'CAMBIO'
+                            elif 'PARTICULAR' in modal_content.upper():
+                                tipo = 'PARTICULAR'
+                        except:
+                            pass
+                    print(f"[Premier PreFetch] Fila {i}: Tipo='{tipo}'")
                     
                     # Extraer DID del link
                     did = None
