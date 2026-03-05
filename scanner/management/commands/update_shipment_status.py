@@ -69,7 +69,7 @@ class Command(BaseCommand):
                 continue
                 
             try:
-                self.stdout.write(f'[{i}/{total_rows}] Fila {row_num} (ID: {shipment_id})...', ending='')
+                self.stdout.write(f'[{i}/{total_rows}] Fila {row_num} (ID: {shipment_id})', ending='')
                 
                 # Consultar API - Usamos shipment_id para encontrar la cuenta correcta
                 # La API hace "fuerza bruta" entre cuentas si no le pasamos sender_id
@@ -177,7 +177,8 @@ class Command(BaseCommand):
                             self.stdout.write(self.style.ERROR(' ERROR al escribir en Sheets'))
                     else:
                         skipped_count += 1
-                        self.stdout.write(f' Sin cambios ({current_status})')
+                        time_info = f' | API: {api_timestamp_str}' if api_timestamp_str else ''
+                        self.stdout.write(f' Sin cambios ({current_status}){time_info}')
                         
                 else:
                     # No encontrado en ML (Posiblemente Premier o Error)
