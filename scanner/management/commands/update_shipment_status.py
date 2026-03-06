@@ -177,8 +177,9 @@ class Command(BaseCommand):
                             self.stdout.write(self.style.ERROR(' ERROR al escribir en Sheets'))
                     else:
                         skipped_count += 1
-                        time_info = f' | API: {api_timestamp_str}' if api_timestamp_str else ''
-                        self.stdout.write(f' Sin cambios ({current_status}){time_info}')
+                        api_status_info = f'{new_status_raw} ({new_status_formatted})' if new_status_raw else current_status
+                        time_info = f' | API: {api_status_info} @ {api_timestamp_str}' if api_timestamp_str else f' | API: {api_status_info}'
+                        self.stdout.write(f' Sin cambios{time_info}')
                         
                 else:
                     # No encontrado en ML (Posiblemente Premier o Error)

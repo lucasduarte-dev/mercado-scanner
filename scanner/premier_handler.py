@@ -12,17 +12,34 @@ def process_premier_scan(qr_data, scanner_user):
         did = str(qr_data.get('did', ''))
         
         # DETECCIÓN DE DUPLICADOS
+        from django.utils import timezone
+        import datetime
+
+        five_min_ago = timezone.now() - datetime.timedelta(minutes=5)
+
+        # 1. Ya existe un scan exitoso del mismo DID
         existing_scan = Scan.objects.filter(
             shipment_id=did,
             is_logistics=True,
             status='success'
         ).first()
+
+        # 2. O hay uno en proceso (pending) de los últimos 5 minutos
+        if not existing_scan:
+            existing_scan = Scan.objects.filter(
+                shipment_id=did,
+                is_logistics=True,
+                status='pending',
+                scanned_at__gte=five_min_ago
+            ).first()
+            if existing_scan:
+                print(f"[Premier] ⚠️ Duplicado en proceso: DID {did} (pendiente desde {existing_scan.scanned_at})")
         
         if existing_scan:
             print(f"[Premier] ⚠️ Duplicado detectado: DID {did} (escaneado el {existing_scan.scanned_at})")
             
-            from django.utils import timezone
             local_date = timezone.localtime(existing_scan.scanned_at)
+
 
             return JsonResponse({
                 'success': True,
