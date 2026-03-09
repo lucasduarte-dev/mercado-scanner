@@ -83,13 +83,18 @@ class Command(BaseCommand):
                     if api_last_updated:
                         try:
                             # Formato ML: "2026-02-25T18:30:00.000-0300"
-                            # Limpiar y parsear
-                            clean_ts = api_last_updated.replace('T', ' ')
-                            if '.' in clean_ts:
-                                clean_ts = clean_ts[:clean_ts.index('.')]
-                            api_timestamp = datetime.fromisoformat(api_last_updated)
+                            # Python < 3.11 requiere offset con dos puntos: -03:00
+                            import re as _re
+                            ts = api_last_updated
+                            # Normalizar offset: -0300 → -03:00
+                            ts = _re.sub(r'([+-])(\d{2})(\d{2})$', r'\1\2:\3', ts)
+                            # Quitar milisegundos si los hay
+                            if '.' in ts:
+                                ts = ts[:ts.index('.')] + ts[ts.index('.')+4:]
+                            api_timestamp = datetime.fromisoformat(ts)
                             api_timestamp_str = api_timestamp.strftime('%d/%m %H:%M')
-                        except Exception:
+                        except Exception as e:
+                            self.stdout.write(self.style.WARNING(f' [WARN] No se pudo parsear timestamp "{api_last_updated}": {e}'))
                             api_timestamp_str = api_last_updated[:16] if len(api_last_updated) > 16 else api_last_updated
 
                     # Priorizar estado del PEDIDO/VENTA
