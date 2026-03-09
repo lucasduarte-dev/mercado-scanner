@@ -106,12 +106,24 @@ class Command(BaseCommand):
                     if not new_status_raw:
                         new_status_raw = api_result['shipment'].get('status')
 
+                    # Misma lógica que el scanner (views.py):
+                    # Si la order está cancelada pero tiene tag 'delivered' → DEVOLUCION, no CANCELADO
+                    # Si tiene tag 'not_delivered' → CANCELADO normal (nunca llegó al cliente)
+                    if new_status_raw == 'cancelled' and api_result.get('order'):
+                        tags = api_result['order'].get('tags', [])
+                        if 'delivered' in tags:
+                            new_status_raw = 'returned'
+                            self.stdout.write(f' [tag:delivered] Cancelada pero entregada → DEVOLUCION')
+                        elif 'not_delivered' in tags:
+                            pass  # CANCELADO normal, nunca llegó
+
                     # Normalizar estado para comparación (VIGENTE / CANCELADO / DEVOLUCION)
                     new_status_formatted = GoogleSheetsLogger._format_status(
                         new_status_raw,
                         order_data=api_result.get('order'),
                         shipment_data=api_result.get('shipment')
                     )
+
                     
                     # Comparar con estado actual en Sheets
                     if new_status_formatted != current_status:
