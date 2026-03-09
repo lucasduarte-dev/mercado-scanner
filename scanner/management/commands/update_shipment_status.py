@@ -121,12 +121,32 @@ class Command(BaseCommand):
                             time_info = f' (cambió: {api_timestamp_str})' if api_timestamp_str else ''
                             self.stdout.write(self.style.SUCCESS(f' ACTUALIZADO: {current_status} -> {new_status_formatted}{time_info}'))
                             
-                            # DETECTAR: Si pasa de VIGENTE a CANCELADO, usar la hora de la API para decidir
+                            # DETECTAR: Si pasa de VIGENTE a CANCELADO, usar la hora de CANCELACIÓN de la order
                             if current_status == 'VIGENTE' and new_status_formatted == 'CANCELADO':
                                 CUTOFF = time(14, 30)
-                                cancel_after_cutoff = bool(api_timestamp) and api_timestamp.time() >= CUTOFF
+                                
+                                # Preferir order.date_closed (hora exacta de cancelación)
+                                # sobre shipment.last_updated (puede ser hora de entrega u otro evento)
+                                cancel_timestamp = None
+                                if api_result.get('order'):
+                                    date_closed = api_result['order'].get('date_closed', '')
+                                    if date_closed:
+                                        try:
+                                            ts = re.sub(r'([+-])(\d{2})(\d{2})$', r'\1\2:\3', date_closed)
+                                            if '.' in ts:
+                                                ts = ts[:ts.index('.')] + ts[ts.index('.')+4:]
+                                            cancel_timestamp = datetime.fromisoformat(ts)
+                                        except Exception:
+                                            pass
+                                
+                                # Fallback a api_timestamp (shipment.last_updated) si no hay date_closed
+                                if not cancel_timestamp:
+                                    cancel_timestamp = api_timestamp
+                                
+                                cancel_after_cutoff = bool(cancel_timestamp) and cancel_timestamp.time() >= CUTOFF
+
                                 if cancel_after_cutoff:
-                                    self.stdout.write(f'  📋 Cancelación a las {api_timestamp.strftime("%H:%M")} del {api_timestamp.strftime("%d/%m")} (después del corte 14:30)')
+                                    self.stdout.write(f'  📋 Cancelación a las {cancel_timestamp.strftime("%H:%M")} del {cancel_timestamp.strftime("%d/%m")} (después del corte 14:30)')
                                     try:
                                         pending_sheet = GoogleSheetsLogger._get_pending_returns_sheet()
                                         existing = None
@@ -144,8 +164,9 @@ class Command(BaseCommand):
                                     except Exception as e:
                                         self.stdout.write(self.style.WARNING(f'  [WARN] No se pudo registrar en Pendientes: {e}'))
                                 else:
-                                    hora_str = api_timestamp.strftime('%H:%M') if api_timestamp else 'desconocida'
+                                    hora_str = cancel_timestamp.strftime('%H:%M') if cancel_timestamp else 'desconocida'
                                     self.stdout.write(f'  ✓ Cancelación a las {hora_str} → antes del corte 14:30, no requiere devolución')
+
                             
                             # BUG FIX #4: También actualizar en BD para mantener sincronización
                             try:
