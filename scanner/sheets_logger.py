@@ -166,12 +166,13 @@ class GoogleSheetsLogger:
             week_start = (datetime.now() - timedelta(days=datetime.now().weekday())).strftime('%Y-%m-%d')
             
             # Fórmula para contar pedidos del día
+            # SUMPRODUCT excluye filas donde ESTADO DE RETIRO (col C) sea CANCELADO
             sheet.update('A1', [[f'Pedidos Hoy: {today}']])
-            sheet.update('B1', [[f'=COUNTIF(A:A,">={today}")']])
+            sheet.update('B1', [[f'=SUMPRODUCT((LEFT(A4:A5000,10)="{today}")*(C4:C5000<>"CANCELADO")*(A4:A5000<>""))']], raw=False)
             
             # Fórmula para contar pedidos de la semana
             sheet.update('A2', [[f'Pedidos Esta Semana (desde {week_start}):']])
-            sheet.update('B2', [[f'=COUNTIF(A:A,">={week_start}")']])
+            sheet.update('B2', [[f'=SUMPRODUCT((LEFT(A4:A5000,10)>="{week_start}")*(C4:C5000<>"CANCELADO")*(A4:A5000<>""))']], raw=False)
             
             # print("[OK] Encabezados y estadísticas verificados")
         except Exception as e:

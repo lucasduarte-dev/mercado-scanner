@@ -68,7 +68,8 @@ class Command(BaseCommand):
         particulares_cancelados = 0
         
         daily_counts = {day: 0 for day in ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']}
-        cancelados_list = [] # Para detalle
+        cancelados_list = []  # Para detalle
+        seen_ids = set()  # Para evitar contar duplicados (mismo shipment_id dos veces)
         
         # Iterar filas (saltando headers en filas 1-3)
         # Asumiendo que datos empiezan en fila 4 (indice 3)
@@ -91,12 +92,26 @@ class Command(BaseCommand):
             # weekday(): 0=Lunes, 6=Domingo
             day_idx = fecha_dt.weekday()
             day_name = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'][day_idx]
-            daily_counts[day_name] += 1
             
             # 3. Categorizar
             tipo_envio = row[col_tipo].strip().upper()
             estado_retiro = row[col_retiro].strip().upper()
             estado_actual = row[col_actual].strip().upper()
+            shipment_id = row[5].strip() if len(row) > 5 else ''
+
+            # SKIP: si el estado de retiro ya era CANCELADO en el primer escaneo,
+            # no contar esta fila en ningún totalizador
+            if 'CANCELADO' in estado_retiro:
+                continue
+
+            # SKIP: duplicado — mismo shipment_id ya contado esta semana
+            if shipment_id and shipment_id in seen_ids:
+                self.stdout.write(self.style.WARNING(f'  [DUP] Ignorando duplicado: {shipment_id}'))
+                continue
+            if shipment_id:
+                seen_ids.add(shipment_id)
+            
+            daily_counts[day_name] += 1
             
             # FLEX
             if tipo_envio == 'FLEX':
