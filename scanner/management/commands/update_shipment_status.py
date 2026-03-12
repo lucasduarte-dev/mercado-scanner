@@ -124,11 +124,16 @@ class Command(BaseCommand):
                         shipment_data=api_result.get('shipment')
                     )
 
-                    
+                    # Determine what status to display on the main sheet
+                    display_status = new_status_formatted
+                    if display_status == 'DEVOLUCION':
+                        # Show as VIGENTE on the main sheet for returned shipments
+                        display_status = 'VIGENTE'
+
                     # Comparar con estado actual en Sheets
                     if new_status_formatted != current_status:
                         # Actualizar en Sheets con resaltado
-                        if GoogleSheetsLogger.update_row_status(row_num, new_status_raw, highlight=True):
+                        if GoogleSheetsLogger.update_row_status(row_num, display_status, highlight=True):
                             updated_count += 1
                             time_info = f' (cambió: {api_timestamp_str})' if api_timestamp_str else ''
                             self.stdout.write(self.style.SUCCESS(f' ACTUALIZADO: {current_status} -> {new_status_formatted}{time_info}'))
