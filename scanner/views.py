@@ -454,6 +454,14 @@ def mark_return_complete(request):
                 'error': 'shipment_id es requerido'
             }, status=400)
         
+        # Si el shipment_id es un JSON de Premier (QR completo), extraer el 'did'
+        try:
+            qr_parsed = json.loads(shipment_id)
+            if isinstance(qr_parsed, dict) and 'did' in qr_parsed:
+                shipment_id = str(qr_parsed['did'])
+        except (json.JSONDecodeError, TypeError):
+            pass  # No es JSON, usar el valor tal cual
+        
         # Marcar en Pendientes de devolución
         from .sheets_logger import GoogleSheetsLogger
         
