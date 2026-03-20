@@ -34,6 +34,9 @@ def index(request):
     total_scans = today_scans.count()
     vigentes = total_scans - cancelados - devoluciones
     
+    cambios = today_scans.filter(logistics_type='CAMBIO').exclude(is_cancelled=True).count()
+    particulares = today_scans.filter(logistics_type='PARTICULAR').exclude(is_cancelled=True).count()
+
     stats = {
         'flex': today_scans.filter(shipping_mode='flex').exclude(is_cancelled=True).exclude(current_status__icontains='return').count(),
         'mensajeria': today_scans.filter(shipping_mode='mensajeria').exclude(is_cancelled=True).exclude(current_status__icontains='return').count(),
@@ -41,6 +44,9 @@ def index(request):
         'cancelados': cancelados,  # Aparte para no confundir
         'devoluciones': devoluciones,  # Aparte
         'total': total_scans,  # Total de escaneos (incluye todo)
+        'cambios': cambios,
+        'particulares': particulares,
+        'total_mensajeria': cambios + particulares,
     }
     
     context = {
@@ -327,12 +333,15 @@ def process_scan(request):
                         debe_registrar_pendiente = True
                         print(f"[SCAN] Detectado: Vigente→CANCELADO - Registrando en Pendientes")
             
-            # REGISTRAR EN UNA SOLA HOJA - NO EN AMBAS
+            # REGISTRAR EN AMBAS HOJAS cuando corresponda
             if debe_registrar_pendiente:
-                print(f"[SCAN] 1er escaneo de {estado_tipo} - Registrando en 'Pendientes de devolución'")
+                print(f"[SCAN] 1er escaneo de {estado_tipo} - Registrando en hoja principal Y en 'Pendientes de devolución'")
+                # Registrar en hoja principal (para que aparezca en el reporte semanal)
+                GoogleSheetsLogger.log_scan(scan)
+                # Registrar también en hoja de pendientes
                 GoogleSheetsLogger.log_to_pending_returns(scan)
             else:
-                # Solo registrar en hoja principal si NO va a pendientes
+                # Registrar solo en hoja principal
                 GoogleSheetsLogger.log_scan(scan)
             
             # TERCER ESCANEO de CAMBIO/DEVOLUCION → Marcar como completo

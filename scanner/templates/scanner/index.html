@@ -17,6 +17,26 @@
             margin-bottom: 25px;
         }
 
+        /* Sección de cambios/particulares separada */
+        .mensajeria-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 25px;
+        }
+
+        .mensajeria-stats .stat-card {
+            position: relative;
+        }
+
+        .mensajeria-label {
+            font-size: 0.65rem;
+            color: #a0a0b0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+
         .stat-card {
             background: linear-gradient(135deg, #2a2a4a, #1a1a2e);
             padding: 15px;
@@ -72,6 +92,10 @@
         @media (max-width: 600px) {
             .stats-container {
                 gap: 10px;
+            }
+
+            .mensajeria-stats {
+                gap: 8px;
             }
 
             .stat-card {
@@ -143,6 +167,22 @@
             <div class="stat-card" style="border-color: #f97316;">
                 <h3>↩️ Devoluciones</h3>
                 <span class="stat-value" style="color: #f97316;">{{ stats.devoluciones }}</span>
+            </div>
+        </div>
+
+        <!-- Contadores de Mensajería (CAMBIOS / PARTICULARES) -->
+        <div class="mensajeria-stats">
+            <div class="stat-card" style="border-color: #a78bfa;">
+                <h3>🔄 Cambios</h3>
+                <span class="stat-value" id="counter-cambios" style="color: #a78bfa;">{{ stats.cambios }}</span>
+            </div>
+            <div class="stat-card" style="border-color: #38bdf8;">
+                <h3>👤 Particulares</h3>
+                <span class="stat-value" id="counter-particulares" style="color: #38bdf8;">{{ stats.particulares }}</span>
+            </div>
+            <div class="stat-card" style="border-color: #e2e8f0; background: linear-gradient(135deg, #2a2a4a, #1e1e3a);">
+                <h3>📦 Total mens.</h3>
+                <span class="stat-value" id="counter-total-mensajeria" style="color: #e2e8f0;">{{ stats.total_mensajeria }}</span>
             </div>
         </div>
 

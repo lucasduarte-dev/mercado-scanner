@@ -10,6 +10,30 @@ let lastScannedCode = null;
 let lastScanTime = 0;
 const DUPLICATE_THRESHOLD = 5000; // 5 segundos para evitar duplicados
 
+// Contadores de sesión — arrancan con los valores actuales del día (desde la BD via Django)
+const sessionCounters = {
+    cambios: parseInt(document.getElementById('counter-cambios')?.textContent || '0', 10),
+    particulares: parseInt(document.getElementById('counter-particulares')?.textContent || '0', 10)
+};
+
+function incrementCounter(tipo) {
+    const t = (tipo || '').toUpperCase();
+    if (t === 'CAMBIO') {
+        sessionCounters.cambios++;
+    } else if (t === 'PARTICULAR') {
+        sessionCounters.particulares++;
+    } else {
+        return; // No es un tipo que necesitamos contar
+    }
+    // Actualizar DOM
+    const elCambios = document.getElementById('counter-cambios');
+    const elParticulares = document.getElementById('counter-particulares');
+    const elTotal = document.getElementById('counter-total-mensajeria');
+    if (elCambios) elCambios.textContent = sessionCounters.cambios;
+    if (elParticulares) elParticulares.textContent = sessionCounters.particulares;
+    if (elTotal) elTotal.textContent = sessionCounters.cambios + sessionCounters.particulares;
+}
+
 // Elementos DOM
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
@@ -243,6 +267,11 @@ async function onScanSuccess(decodedText) {
 
                 showOverlayResult(data.api_data);
                 addToHistory(data);
+
+                // Actualizar contadores de CAMBIO / PARTICULAR si aplica
+                if (apiData && apiData.is_logistics && apiData.tipo) {
+                    incrementCounter(apiData.tipo);
+                }
             }
 
         } else {
